@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FRAMEWORK — Short-Form Video Editor | Turning Scrolls Into Views</title>
+<meta name="description" content="Freelance short-form video editor specializing in viral reels, TikToks, YouTube Shorts, motion graphics and retention-focused cuts for personal brands." />
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Tailwind -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          ink: '#05060A',
+          panel: '#0B0D14',
+          panel2: '#10131D',
+          line: 'rgba(245,245,247,0.08)',
+          violet: '#7C5CFF',
+          cyan: '#2EE6FF',
+          off: '#F5F5F7',
+          mute: '#8A8FA3',
+        },
+        fontFamily: {
+          display: ['"Bebas Neue"', 'sans-serif'],
+          body: ['"Inter"', 'sans-serif'],
+          mono: ['"JetBrains Mono"', 'monospace'],
+        },
+      },
+    },
+  };
+</script>
+
+<!-- GSAP -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+
+<style>
+  /* ===================== BASE / TOKENS ===================== */
+  :root{
+    --ink:#05060A;
+    --panel:#0B0D14;
+    --violet:#7C5CFF;
+    --cyan:#2EE6FF;
+    --off:#F5F5F7;
+    --mute:#8A8FA3;
+  }
+  *{ box-sizing:border-box; }
+  html{ scroll-behavior:smooth; background:var(--ink); }
+  body{
+    background:var(--ink);
+    color:var(--off);
+    font-family:'Inter', sans-serif;
+    overflow-x:hidden;
+    cursor:none;
+  }
+  ::selection{ background:var(--violet); color:#fff; }
+
+  h1,h2,h3,.font-display{ font-family:'Bebas Neue', sans-serif; letter-spacing:0.01em; }
+  .font-mono{ font-family:'JetBrains Mono', monospace; }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important; scroll-behavior:auto !important; }
+  }
+
+  /* ===================== CUSTOM CURSOR ===================== */
+  #cursor-dot, #cursor-ring{
+    position:fixed; top:0; left:0; pointer-events:none; z-index:9999;
+    transform:translate(-50%,-50%);
+    will-change:transform;
+  }
+  #cursor-dot{
+    width:6px; height:6px; border-radius:50%;
+    background:var(--cyan);
+  }
+  #cursor-ring{
+    width:36px; height:36px; border-radius:50%;
+    border:1px solid rgba(245,245,247,0.35);
+    transition:width .25s ease,height .25s ease,border-color .25s ease,background .25s ease;
+  }
+  #cursor-ring.ring-hover{
+    width:64px; height:64px;
+    border-color:var(--violet);
+    background:rgba(124,92,255,0.08);
+  }
+  @media (hover:none), (pointer:coarse){
+    #cursor-dot, #cursor-ring{ display:none; }
+    body{ cursor:auto; }
+  }
+
+  /* ===================== SCROLLBAR ===================== */
+  ::-webkit-scrollbar{ width:8px; }
+  ::-webkit-scrollbar-track{ background:var(--ink); }
+  ::-webkit-scrollbar-thumb{ background:linear-gradient(var(--violet), var(--cyan)); border-radius:4px; }
+
+  /* ===================== LOADER ===================== */
+  #loader{
+    position:fixed; inset:0; z-index:10000;
+    background:#05060A;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:1.5rem;
+  }
+  #loader .pct{
+    font-family:'JetBrains Mono', monospace;
+    font-size:0.85rem; color:var(--mute); letter-spacing:0.2em;
+  }
+  #loader .bar-track{
+    width:240px; height:1px; background:rgba(245,245,247,0.12); position:relative; overflow:hidden;
+  }
+  #loader .bar-fill{
+    position:absolute; left:0; top:0; height:100%; width:0%;
+    background:linear-gradient(90deg, var(--violet), var(--cyan));
+  }
+  #loader .loader-word{
+    font-family:'Bebas Neue', sans-serif;
+    font-size:clamp(2rem,6vw,4rem);
+    letter-spacing:0.05em;
+    color:#fff;
+    overflow:hidden;
+  }
+
+  /* ===================== TIMELINE RULER (signature element) ===================== */
+  .tc-ruler{
+    width:100%;
+    height:28px;
+    display:flex;
+    align-items:flex-end;
+    gap:0;
+    position:relative;
+  }
+  .tc-ruler .tick{
+    flex:1;
+    border-left:1px solid rgba(245,245,247,0.10);
+    height:8px;
+  }
+  .tc-ruler .tick:nth-child(4n+1){ height:16px; border-left:1px solid rgba(245,245,247,0.22); }
+
+  .section-divider{
+    position:relative;
+    width:100%;
+    border-top:1px solid rgba(245,245,247,0.08);
+    padding-top:0;
+  }
+  .section-divider .tc-label{
+    position:absolute; top:-11px; left:50%; transform:translateX(-50%);
+    background:var(--ink);
+    padding:0 12px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.25em;
+    color:var(--mute);
+  }
+
+  /* scroll progress playhead */
+  #scroll-progress-wrap{
+    position:fixed; top:0; left:0; width:100%; height:3px; z-index:9000;
+    background:rgba(245,245,247,0.06);
+  }
+  #scroll-progress-bar{
+    height:100%; width:0%;
+    background:linear-gradient(90deg, var(--violet), var(--cyan));
+    position:relative;
+  }
+  #scroll-progress-bar::after{
+    content:'';
+    position:absolute; right:-5px; top:50%; transform:translateY(-50%);
+    width:10px; height:10px; border-radius:50%;
+    background:var(--cyan);
+    box-shadow:0 0 12px 2px var(--cyan);
+  }
+
+  /* ===================== GLASS PANEL ===================== */
+  .glass{
+    background:rgba(255,255,255,0.03);
+    backdrop-filter:blur(18px);
+    -webkit-backdrop-filter:blur(18px);
+    border:1px solid rgba(255,255,255,0.08);
+  }
+  .glass-strong{
+    background:rgba(13,15,24,0.65);
+    backdrop-filter:blur(24px);
+    -webkit-backdrop-filter:blur(24px);
+    border:1px solid rgba(255,255,255,0.10);
+  }
+
+  /* ===================== GRADIENT TEXT ===================== */
+  .grad-text{
+    background:linear-gradient(90deg, var(--violet), var(--cyan));
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+  }
+
+  /* ===================== NOISE / GRAIN OVERLAY ===================== */
+  .grain{
+    position:fixed; inset:0; pointer-events:none; z-index:5;
+    opacity:0.035; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* ===================== MAGNETIC BUTTONS ===================== */
+  .magnetic{ position:relative; will-change:transform; }
+  .btn-primary{
+    background:linear-gradient(90deg, var(--violet), var(--cyan));
+    color:#05060A;
+    font-weight:700;
+  }
+  .btn-outline{
+    border:1px solid rgba(245,245,247,0.25);
+    color:#fff;
+  }
+  .btn-outline:hover{ border-color: var(--cyan); }
+
+  /* ===================== NAV LINK UNDERLINE ===================== */
+  .nav-link{ position:relative; }
+  .nav-link::after{
+    content:''; position:absolute; left:0; bottom:-4px; width:0%; height:1px;
+    background:linear-gradient(90deg, var(--violet), var(--cyan));
+    transition:width .35s ease;
+  }
+  .nav-link:hover::after{ width:100%; }
+
+  /* ===================== TEXT REVEAL ===================== */
+  .reveal-line{ overflow:hidden; }
+  .reveal-line > span{ display:inline-block; will-change:transform; }
+
+  /* ===================== HERO BG ===================== */
+  #hero-canvas{ position:absolute; inset:0; width:100%; height:100%; }
+
+  .hero-gradient{
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(124,92,255,0.25), transparent 60%),
+      radial-gradient(ellipse 60% 40% at 85% 30%, rgba(46,230,255,0.12), transparent 60%),
+      radial-gradient(ellipse 60% 40% at 10% 70%, rgba(124,92,255,0.10), transparent 60%);
+  }
+
+  /* floating particles */
+  .float-particle{
+    position:absolute; border-radius:50%;
+    background:rgba(46,230,255,0.5);
+    box-shadow:0 0 12px 2px rgba(46,230,255,0.4);
+  }
+
+  /* ===================== WAVEFORM ===================== */
+  .waveform{ display:flex; align-items:flex-end; gap:3px; height:40px; }
+  .waveform span{
+    width:3px; border-radius:2px;
+    background:linear-gradient(180deg, var(--cyan), var(--violet));
+    display:block;
+  }
+
+  /* ===================== CARD HOVER LIFT ===================== */
+  .card-lift{ transition: transform .5s cubic-bezier(.2,.8,.2,1), border-color .4s ease, box-shadow .5s ease; }
+  .card-lift:hover{
+    transform: translateY(-8px);
+    border-color: rgba(124,92,255,0.4);
+    box-shadow: 0 20px 60px -20px rgba(124,92,255,0.35);
+  }
+
+  /* ===================== PORTFOLIO ITEM ===================== */
+  .port-item{ position:relative; overflow:hidden; cursor:none; }
+  .port-thumb{
+    transition: transform 1.1s cubic-bezier(.16,1,.3,1);
+  }
+  .port-item:hover .port-thumb{ transform:scale(1.08); }
+  .port-overlay{
+    opacity:0; transition:opacity .45s ease;
+    background:linear-gradient(180deg, rgba(5,6,10,0) 0%, rgba(5,6,10,0.92) 100%);
+  }
+  .port-item:hover .port-overlay{ opacity:1; }
+  .port-meta{ transform:translateY(14px); opacity:0; transition:transform .5s cubic-bezier(.2,.8,.2,1) .05s, opacity .5s ease .05s; }
+  .port-item:hover .port-meta{ transform:translateY(0); opacity:1; }
+  .play-ring{
+    transform:scale(.7); opacity:0; transition:transform .5s cubic-bezier(.2,.8,.2,1), opacity .4s ease;
+  }
+  .port-item:hover .play-ring{ transform:scale(1); opacity:1; }
+
+  /* ===================== SHOWREEL ===================== */
+  .reel-wrap{ position:relative; overflow:hidden; }
+  .reel-frame{
+    aspect-ratio:16/9;
+    background:
+      linear-gradient(135deg, rgba(124,92,255,0.18), rgba(46,230,255,0.10)),
+      #0B0D14;
+  }
+
+  /* ===================== MODAL ===================== */
+  #video-modal{ position:fixed; inset:0; z-index:9500; display:none; }
+  #video-modal.open{ display:flex; }
+
+  /* ===================== UTILS ===================== */
+  .clip-tag{
+    font-family:'JetBrains Mono', monospace;
+    font-size:10px; letter-spacing:0.15em;
+  }
+
+  .vignette{
+    pointer-events:none; position:absolute; inset:0;
+    background: radial-gradient(ellipse 70% 60% at 50% 50%, transparent 50%, rgba(0,0,0,0.6) 100%);
+  }
+
+  input::placeholder, textarea::placeholder{ color:rgba(138,143,163,0.7); }
+  input, textarea{ background:transparent; }
+  input:focus, textarea:focus{ outline:none; }
+
+  .focus-ring:focus-visible{
+    outline:2px solid var(--cyan); outline-offset:3px;
+  }
+
+  /* number ticker */
+  .stat-num{ font-variant-numeric: tabular-nums; }
+
+  /* ===================== FILTER BUTTONS ===================== */
+  .filter-btn{ color:var(--mute); transition: color .3s ease, border-color .3s ease, background .3s ease; }
+  .filter-btn:hover{ color:#fff; border-color: rgba(245,245,247,0.3); }
+  .filter-btn.active{
+    color:#05060A;
+    background:linear-gradient(90deg, var(--violet), var(--cyan));
+    border-color:transparent;
+  }
+</style>
+</head>
+<body class="bg-ink text-off font-body antialiased">
+
+<!-- ===================== GRAIN OVERLAY ===================== -->
+<div class="grain"></div>
+
+<!-- ===================== CUSTOM CURSOR ===================== -->
+<div id="cursor-dot"></div>
+<div id="cursor-ring"></div>
+
+<!-- ===================== SCROLL PROGRESS (timecode playhead) ===================== -->
+<div id="scroll-progress-wrap">
+  <div id="scroll-progress-bar"></div>
+</div>
+
+<!-- ===================== LOADER ===================== -->
+<div id="loader">
+  <div class="loader-word" id="loader-word">FRAMEWORK</div>
+  <div class="bar-track"><div class="bar-fill" id="loader-bar"></div></div>
+  <div class="pct"><span id="loader-pct">0</span>%&nbsp;&nbsp;LOADING TIMELINE…</div>
+</div>
+
+<!-- ===================== NAVBAR ===================== -->
+<header id="navbar" class="fixed top-0 left-0 w-full z-[2000] transition-all duration-500">
+  <nav class="flex items-center justify-between px-6 md:px-10 py-5">
+    <a href="#home" class="font-display text-2xl tracking-wider text-white flex items-center gap-2">
+      <span class="w-2 h-2 rounded-full bg-cyan animate-pulse"></span>
+      FRAMEWORK<span class="text-cyan">.</span>
+    </a>
+
+    <div class="hidden lg:flex items-center gap-10 font-mono text-[11px] tracking-[0.18em] text-mute uppercase">
+      <a href="#work" class="nav-link hover:text-white transition-colors">Work</a>
+      <a href="#services" class="nav-link hover:text-white transition-colors">Services</a>
+      <a href="#process" class="nav-link hover:text-white transition-colors">Process</a>
+      <a href="#about" class="nav-link hover:text-white transition-colors">About</a>
+      <a href="#contact" class="nav-link hover:text-white transition-colors">Contact</a>
+    </div>
+
+    <a href="#contact" class="magnetic hidden md:inline-flex items-center gap-2 btn-primary text-xs font-mono tracking-widest uppercase px-5 py-3 rounded-full">
+      Book a Call
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
+
+    <button id="menu-btn" class="lg:hidden text-white" aria-label="Open menu">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="1.5"/></svg>
+    </button>
+  </nav>
+</header>
+
+<!-- ===================== MOBILE MENU ===================== -->
+<div id="mobile-menu" class="fixed inset-0 z-[3000] bg-ink/98 backdrop-blur-xl translate-x-full transition-transform duration-500 ease-out lg:hidden">
+  <div class="flex justify-between items-center px-6 py-5">
+    <span class="font-display text-2xl">FRAMEWORK<span class="text-cyan">.</span></span>
+    <button id="menu-close" class="text-white" aria-label="Close menu">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.5"/></svg>
+    </button>
+  </div>
+  <div class="flex flex-col gap-2 px-6 mt-10">
+    <a href="#work" class="mobile-link font-display text-5xl py-3 border-b border-line">Work</a>
+    <a href="#services" class="mobile-link font-display text-5xl py-3 border-b border-line">Services</a>
+    <a href="#process" class="mobile-link font-display text-5xl py-3 border-b border-line">Process</a>
+    <a href="#about" class="mobile-link font-display text-5xl py-3 border-b border-line">About</a>
+    <a href="#contact" class="mobile-link font-display text-5xl py-3 border-b border-line">Contact</a>
+  </div>
+  <div class="px-6 mt-10 font-mono text-xs text-mute tracking-widest">
+    <p>EDIT@FRAMEWORKSTUDIO.CO</p>
+    <p class="mt-2">+1 (555) 010-1234</p>
+  </div>
+</div>
+
+<!-- ===================== HERO ===================== -->
+<section id="home" class="relative min-h-[100svh] flex flex-col justify-between overflow-hidden hero-gradient">
+  <div id="hero-canvas" class="opacity-80"></div>
+  <div class="vignette"></div>
+
+  <!-- top spacer for nav -->
+  <div class="h-24 md:h-28"></div>
+
+  <div class="relative z-10 flex-1 flex flex-col justify-center px-6 md:px-10">
+    <div class="font-mono text-[11px] md:text-xs tracking-[0.3em] text-cyan/80 mb-6 flex items-center gap-3" data-hero-fade>
+      <span class="w-8 h-px bg-cyan/60"></span>
+      FREELANCE SHORT-FORM VIDEO EDITOR
+    </div>
+
+    <h1 class="font-display leading-[0.85] text-[16vw] md:text-[8.2vw] lg:text-[7.5vw] text-white">
+      <div class="reveal-line"><span>TURNING SCROLLS</span></div>
+      <div class="reveal-line"><span>INTO <span class="grad-text">VIEWS</span><span class="text-cyan">.</span></span></div>
+    </h1>
+
+    <p class="mt-8 max-w-xl text-mute text-base md:text-lg leading-relaxed" data-hero-fade>
+      Short-form video editing that captures attention and drives engagement —
+      built for the first 0.5 seconds and every second after.
+    </p>
+
+    <div class="mt-10 flex flex-wrap items-center gap-4" data-hero-fade>
+      <a href="#work" class="magnetic btn-primary inline-flex items-center gap-2 text-sm font-mono tracking-widest uppercase px-7 py-4 rounded-full">
+        View Work
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M7 17L17 7M17 7H8M17 7v9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+      <a href="#contact" class="magnetic btn-outline inline-flex items-center gap-2 text-sm font-mono tracking-widest uppercase px-7 py-4 rounded-full hover:bg-white/5 transition-colors">
+        Book a Call
+      </a>
+    </div>
+  </div>
+
+  <!-- timeline ruler footer of hero -->
+  <div class="relative z-10 px-6 md:px-10 pb-8">
+    <div class="flex items-center justify-between font-mono text-[10px] tracking-[0.2em] text-mute mb-2">
+      <span>00:00:00:00</span>
+      <div class="waveform hidden md:flex" id="hero-waveform"></div>
+      <span>SCROLL TO PLAY ↓</span>
+    </div>
+    <div class="tc-ruler" id="hero-ruler"></div>
+  </div>
+</section>
+
+<!-- ===================== SHOWREEL ===================== -->
+<section id="showreel" class="relative py-28 md:py-36 px-6 md:px-10 section-divider">
+  <span class="tc-label">01 — SHOWREEL</span>
+
+  <div class="max-w-7xl mx-auto">
+    <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-12" data-reveal>
+      <h2 class="font-display text-[14vw] md:text-[5.5vw] leading-[0.85] text-white">
+        THE <span class="grad-text">SHOWREEL</span>
+      </h2>
+      <p class="text-mute max-w-sm font-body text-sm md:text-base md:text-right">
+        A 60-second cut of edits built for retention — sound on recommended.
+      </p>
+    </div>
+
+    <!-- Main reel player -->
+    <div class="reel-wrap rounded-2xl md:rounded-3xl border border-line group" data-reveal>
+      <div class="reel-frame relative flex items-center justify-center">
+        <!-- REPLACE: swap this <video> src/poster with your real showreel file -->
+        <video
+          id="main-reel"
+          class="absolute inset-0 w-full h-full object-cover opacity-70"
+          muted loop playsinline autoplay
+          poster="https://placehold.co/1920x1080/0B0D14/8A8FA3?text=SHOWREEL+%E2%80%94+REPLACE+WITH+YOUR+VIDEO+FILE">
+          <!-- <source src="assets/video/showreel.mp4" type="video/mp4"> -->
+        </video>
+
+        <div class="absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/10 to-ink/40"></div>
+
+        <button id="reel-play-btn" class="magnetic relative z-10 w-20 h-20 md:w-28 md:h-28 rounded-full glass-strong flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" class="ml-1"><path d="M8 5v14l11-7L8 5z" fill="white"/></svg>
+        </button>
+
+        <div class="absolute bottom-5 left-5 right-5 flex items-center justify-between font-mono text-[10px] md:text-xs tracking-[0.2em] text-white/80 z-10">
+          <span>FULL_SHOWREEL_2026.MP4</span>
+          <span class="hidden md:inline">00:60 / 16:9 / 4K</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Thumbnail strip / secondary preview slots -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
+      <!-- REPLACE: each of these is an individual clip preview slot -->
+      <div class="reel-thumb relative rounded-xl overflow-hidden border border-line aspect-video group cursor-pointer" data-reveal>
+        <video class="w-full h-full object-cover opacity-60 group-hover:opacity-90 transition-opacity duration-500" muted loop playsinline autoplay poster="https://placehold.co/600x340/10131D/8A8FA3?text=Clip+01"></video>
+        <div class="absolute inset-0 flex items-end p-3">
+          <span class="font-mono text-[9px] tracking-widest text-white/70">CLIP_01 — HOOK</span>
+        </div>
+      </div>
+      <div class="reel-thumb relative rounded-xl overflow-hidden border border-line aspect-video group cursor-pointer" data-reveal>
+        <video class="w-full h-full object-cover opacity-60 group-hover:opacity-90 transition-opacity duration-500" muted loop playsinline autoplay poster="https://placehold.co/600x340/10131D/8A8FA3?text=Clip+02"></video>
+        <div class="absolute inset-0 flex items-end p-3">
+          <span class="font-mono text-[9px] tracking-widest text-white/70">CLIP_02 — MOTION GFX</span>
+        </div>
+      </div>
+      <div class="reel-thumb relative rounded-xl overflow-hidden border border-line aspect-video group cursor-pointer" data-reveal>
+        <video class="w-full h-full object-cover opacity-60 group-hover:opacity-90 transition-opacity duration-500" muted loop playsinline autoplay poster="https://placehold.co/600x340/10131D/8A8FA3?text=Clip+03"></video>
+        <div class="absolute inset-0 flex items-end p-3">
+          <span class="font-mono text-[9px] tracking-widest text-white/70">CLIP_03 — TRANSITION</span>
+        </div>
+      </div>
+      <div class="reel-thumb relative rounded-xl overflow-hidden border border-line aspect-video group cursor-pointer" data-reveal>
+        <video class="w-full h-full object-cover opacity-60 group-hover:opacity-90 transition-opacity duration-500" muted loop playsinline autoplay poster="https://placehold.co/600x340/10131D/8A8FA3?text=Clip+04"></video>
+        <div class="absolute inset-0 flex items-end p-3">
+          <span class="font-mono text-[9px] tracking-widest text-white/70">CLIP_04 — PAYOFF</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SERVICES ===================== -->
+<section id="services" class="relative py-28 md:py-36 px-6 md:px-10 section-divider">
+  <span class="tc-label">02 — SERVICES</span>
+
+  <div class="max-w-7xl mx-auto">
+    <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-16" data-reveal>
+      <h2 class="font-display text-[14vw] md:text-[5.5vw] leading-[0.85] text-white">
+        WHAT I <span class="grad-text">DELIVER</span>
+      </h2>
+      <p class="text-mute max-w-sm text-sm md:text-base md:text-right">
+        Every edit is engineered around one metric: how long someone keeps watching.
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" id="services-grid">
+      <!-- Service Card Template x6 -->
+      <div class="service-card card-lift rounded-2xl border border-line glass p-8 relative overflow-hidden" data-reveal>
+        <span class="absolute -right-4 -top-4 font-display text-[7rem] text-white/[0.03] select-none">01</span>
+        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-violet/20 to-cyan/10 flex items-center justify-center mb-6 border border-white/10">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 4l14 8-14 8V4z" stroke="#2EE6FF" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        </div>
+        <h3 class="font-display text-2xl tracking-wide text-white mb-3">SHORT FORM EDITING</h3>
+        <p class="text-mute text-sm leading-relaxed">Fast-paced, attention-engineered cuts built for TikTok, Reels and Shorts — hooked in the first second, paced to hold to the last.</p>
+      </div>
+
+      <div class="service-card card-lift rounded-2xl border border-line glass p-8 relative overflow-hidden" data-reveal>
+        <span class="absolute -right-4 -top-4 font-display text-[7rem] text-white/[0.03] select-none">02</span>
+        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-violet/20 to-cyan/10 flex items-center justify-center mb-6 border border-white/10">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 12c2-5 6-8 8-8s6 3 8 8-6 8-8 8-6-3-8-8z" stroke="#7C5CFF" stroke-width="1.6"/><circle cx="12" cy="12" r="2.4" stroke="#7C5CFF" stroke-width="1.6"/></svg>
+        </div>
+        <h3 class="font-display text-2xl tracking-wide text-white mb-3">MOTION GRAPHICS</h3>
+        <p class="text-mute text-sm leading-relaxed">Custom kinetic typography, transitions and overlays that make every clip feel designed, not just cut.</p>
+      </div>
+
+      <div class="service-card card-lift rounded-2xl border border-line glass p-8 relative overflow-hidden" data-reveal>
+        <span class="absolute -right-4 -top-4 font-display text-[7rem] text-white/[0.03] select-none">03</span>
+        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-violet/20 to-cyan/10 flex items-center justify-center mb-6 border border-white/10">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="6" y="3" width="12" height="18" rx="2" stroke="#2EE6FF" stroke-width="1.6"/><path d="M10 18h4" stroke="#2EE6FF" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </div>
+        <h3 class="font-display text-2xl tracking-wide text-white mb-3">REELS &amp; SHORTS</h3>
+        <p class="text-mute text-sm leading-relaxed">Platform-native editing tuned to how Instagram and TikTok actually rank and surface content.</p>
+      </div>
+
+      <div class="service-card card-lift rounded-2xl border border-line glass p-8 relative overflow-hidden" data-reveal>
+        <span class="absolute -right-4 -top-4 font-display text-[7rem] text-white/[0.03] select-none">04</span>
+        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-violet/20 to-cyan/10 flex items-center justify-center mb-6 border border-white/10">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M22 8.5l-6 4 6 4v-8z" stroke="#7C5CFF" stroke-width="1.6" stroke-linejoin="round"/><rect x="2" y="6" width="14" height="12" rx="2.5" stroke="#7C5CFF" stroke-width="1.6"/></svg>
+        </div>
+        <h3 class="font-display text-2xl tracking-wide text-white mb-3">YOUTUBE CONTENT</h3>
+        <p class="text-mute text-sm leading-relaxed">Long-form-to-short pipelines, YouTube Shorts, and channel-ready edits with thumbnail-worthy framing.</p>
+      </div>
+
+      <div class="service-card card-lift rounded-2xl border border-line glass p-8 relative overflow-hidden" data-reveal>
+        <span class="absolute -right-4 -top-4 font-display text-[7rem] text-white/[0.03] select-none">05</span>
+        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-violet/20 to-cyan/10 flex items-center justify-center mb-6 border border-white/10">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.4" stroke="#2EE6FF" stroke-width="1.6"/><path d="M5 20c1.5-4 4-6 7-6s5.5 2 7 6" stroke="#2EE6FF" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </div>
+        <h3 class="font-display text-2xl tracking-wide text-white mb-3">PERSONAL BRAND EDITING</h3>
+        <p class="text-mute text-sm leading-relaxed">Consistent visual identity across every post — built so your content is recognizable before the logo even shows up.</p>
+      </div>
+
+      <div class="service-card card-lift rounded-2xl border border-line glass p-8 relative overflow-hidden" data-reveal>
+        <span class="absolute -right-4 -top-4 font-display text-[7rem] text-white/[0.03] select-none">06</span>
+        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-violet/20 to-cyan/10 flex items-center justify-center mb-6 border border-white/10">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 4v6h6M20 20v-6h-6" stroke="#7C5CFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 10a8 8 0 00-14.9-3M4 14a8 8 0 0014.9 3" stroke="#7C5CFF" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </div>
+        <h3 class="font-display text-2xl tracking-wide text-white mb-3">CONTENT REPURPOSING</h3>
+        <p class="text-mute text-sm leading-relaxed">Turn one podcast or long-form video into a week's worth of scroll-stopping short clips.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== RESULTS / STATS ===================== -->
+<section id="results" class="relative py-28 md:py-36 px-6 md:px-10 section-divider overflow-hidden">
+  <span class="tc-label">03 — RESULTS</span>
+
+  <div class="absolute inset-0 hero-gradient opacity-50 pointer-events-none"></div>
+
+  <div class="max-w-7xl mx-auto relative z-10">
+    <h2 class="font-display text-[14vw] md:text-[5.5vw] leading-[0.85] text-white mb-16" data-reveal>
+      BUILT FOR <span class="grad-text">RESULTS</span>
+    </h2>
+
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-px bg-line rounded-2xl overflow-hidden border border-line">
+      <div class="bg-ink p-8 md:p-10 flex flex-col gap-3" data-reveal>
+        <span class="font-mono text-[10px] tracking-[0.2em] text-cyan">REACH</span>
+        <span class="font-display text-white text-[3rem] md:text-[3.6rem] leading-none stat-num" data-count-to="50" data-suffix="M+">0M+</span>
+        <span class="text-mute text-sm">Potential reach generated across client accounts</span>
+      </div>
+      <div class="bg-ink p-8 md:p-10 flex flex-col gap-3" data-reveal>
+        <span class="font-mono text-[10px] tracking-[0.2em] text-cyan">RETENTION</span>
+        <span class="font-display text-white text-[3rem] md:text-[3.6rem] leading-none stat-num" data-count-to="90" data-suffix="%">0%</span>
+        <span class="text-mute text-sm">Average watch-through on hook-optimized edits</span>
+      </div>
+      <div class="bg-ink p-8 md:p-10 flex flex-col gap-3" data-reveal>
+        <span class="font-mono text-[10px] tracking-[0.2em] text-cyan">TURNAROUND</span>
+        <span class="font-display text-white text-[3rem] md:text-[3.6rem] leading-none stat-num" data-count-to="48" data-suffix="HR">0HR</span>
+        <span class="text-mute text-sm">Standard delivery window per short-form edit</span>
+      </div>
+      <div class="bg-ink p-8 md:p-10 flex flex-col gap-3" data-reveal>
+        <span class="font-mono text-[10px] tracking-[0.2em] text-cyan">TREND-AWARE</span>
+        <span class="font-display text-white text-[3rem] md:text-[3.6rem] leading-none stat-num" data-count-to="24" data-suffix="/7">0/7</span>
+        <span class="text-mute text-sm">Monitoring sounds, formats and pacing trends</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== PORTFOLIO ===================== -->
+<section id="work" class="relative py-28 md:py-36 px-6 md:px-10 section-divider">
+  <span class="tc-label">04 — SELECTED WORK</span>
+
+  <div class="max-w-7xl mx-auto">
+    <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-12" data-reveal>
+      <h2 class="font-display text-[14vw] md:text-[5.5vw] leading-[0.85] text-white">
+        SELECTED <span class="grad-text">WORK</span>
+      </h2>
+      <p class="text-mute max-w-sm text-sm md:text-base md:text-right">
+        12 projects across niches — each thumbnail is a placeholder slot, swap in your own export.
+      </p>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="flex flex-wrap gap-2 mb-10 font-mono text-[10px] tracking-[0.15em] uppercase" id="portfolio-filters" data-reveal>
+      <button class="filter-btn active px-4 py-2 rounded-full border border-line" data-filter="all">All</button>
+      <button class="filter-btn px-4 py-2 rounded-full border border-line" data-filter="Fitness">Fitness</button>
+      <button class="filter-btn px-4 py-2 rounded-full border border-line" data-filter="Business">Business</button>
+      <button class="filter-btn px-4 py-2 rounded-full border border-line" data-filter="Podcast">Podcast</button>
+      <button class="filter-btn px-4 py-2 rounded-full border border-line" data-filter="Gaming">Gaming</button>
+      <button class="filter-btn px-4 py-2 rounded-full border border-line" data-filter="Finance">Finance</button>
+      <button class="filter-btn px-4 py-2 rounded-full border border-line" data-filter="Education">Education</button>
+      <button class="filter-btn px-4 py-2 rounded-full border border-line" data-filter="Lifestyle">Lifestyle</button>
+      <button class="filter-btn px-4 py-2 rounded-full border border-line" data-filter="Motivation">Motivation</button>
+      <button class="filter-btn px-4 py-2 rounded-full border border-line" data-filter="Tech">Tech</button>
+      <button class="filter-btn px-4 py-2 rounded-full border border-line" data-filter="Luxury">Luxury</button>
+      <button class="filter-btn px-4 py-2 rounded-full border border-line" data-filter="Travel">Travel</button>
+      <button class="filter-btn px-4 py-2 rounded-full border border-line" data-filter="Personal Brand">Personal Brand</button>
+    </div>
+
+    <!-- Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5" id="portfolio-grid">
+      <!-- 12 cards generated below; data-category drives filter; data-video is the swap point -->
+    </div>
+  </div>
+</section>
+
+<!-- ===================== VIDEO MODAL ===================== -->
+<div id="video-modal" class="items-center justify-center bg-ink/95 backdrop-blur-xl p-6">
+  <button id="modal-close" class="magnetic absolute top-6 right-6 md:top-10 md:right-10 w-12 h-12 rounded-full glass flex items-center justify-center text-white z-10" aria-label="Close video">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.6"/></svg>
+  </button>
+  <div class="w-full max-w-sm md:max-w-md" id="modal-panel">
+    <div class="relative rounded-3xl overflow-hidden border border-line aspect-[9/16] bg-panel">
+      <!-- REPLACE: modal-video source swaps per project on open -->
+      <video id="modal-video" class="w-full h-full object-cover" controls autoplay loop playsinline></video>
+    </div>
+    <div class="flex items-center justify-between mt-4 font-mono text-[11px] tracking-[0.15em] text-mute">
+      <span id="modal-title">PROJECT_TITLE</span>
+      <span id="modal-cat" class="text-cyan">CATEGORY</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== PROCESS ===================== -->
+<section id="process" class="relative py-28 md:py-36 px-6 md:px-10 section-divider">
+  <span class="tc-label">05 — PROCESS</span>
+
+  <div class="max-w-7xl mx-auto">
+    <h2 class="font-display text-[14vw] md:text-[5.5vw] leading-[0.85] text-white mb-20" data-reveal>
+      HOW IT <span class="grad-text">WORKS</span>
+    </h2>
+
+    <div class="relative" id="process-timeline">
+      <!-- progress line -->
+      <div class="hidden md:block absolute left-0 top-[18px] w-full h-[1px] bg-line"></div>
+      <div class="hidden md:block absolute left-0 top-[18px] h-[1px] bg-gradient-to-r from-violet to-cyan" id="process-line-fill" style="width:0%"></div>
+
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-10 md:gap-6">
+        <div class="process-step relative" data-reveal>
+          <div class="process-dot w-9 h-9 rounded-full glass-strong flex items-center justify-center font-mono text-xs text-cyan mb-6 relative z-10">01</div>
+          <h3 class="font-display text-2xl text-white mb-2 tracking-wide">STRATEGY</h3>
+          <p class="text-mute text-sm leading-relaxed">Audit your content, audience and goals to define the hook, pacing and tone before a single cut is made.</p>
+        </div>
+        <div class="process-step relative" data-reveal>
+          <div class="process-dot w-9 h-9 rounded-full glass-strong flex items-center justify-center font-mono text-xs text-cyan mb-6 relative z-10">02</div>
+          <h3 class="font-display text-2xl text-white mb-2 tracking-wide">EDIT</h3>
+          <p class="text-mute text-sm leading-relaxed">Fast-paced assembly, sound design and pacing pass built around retention, not just visuals.</p>
+        </div>
+        <div class="process-step relative" data-reveal>
+          <div class="process-dot w-9 h-9 rounded-full glass-strong flex items-center justify-center font-mono text-xs text-cyan mb-6 relative z-10">03</div>
+          <h3 class="font-display text-2xl text-white mb-2 tracking-wide">MOTION GRAPHICS</h3>
+          <p class="text-mute text-sm leading-relaxed">Kinetic captions, transitions and overlays layered in to make every frame feel intentional.</p>
+        </div>
+        <div class="process-step relative" data-reveal>
+          <div class="process-dot w-9 h-9 rounded-full glass-strong flex items-center justify-center font-mono text-xs text-cyan mb-6 relative z-10">04</div>
+          <h3 class="font-display text-2xl text-white mb-2 tracking-wide">OPTIMIZATION</h3>
+          <p class="text-mute text-sm leading-relaxed">Format, captions and thumbnails tuned per platform — TikTok, Reels and Shorts are not the same edit.</p>
+        </div>
+        <div class="process-step relative" data-reveal>
+          <div class="process-dot w-9 h-9 rounded-full glass-strong flex items-center justify-center font-mono text-xs text-cyan mb-6 relative z-10">05</div>
+          <h3 class="font-display text-2xl text-white mb-2 tracking-wide">DELIVERY</h3>
+          <p class="text-mute text-sm leading-relaxed">Export, review and revisions handled inside a 48-hour turnaround window, ready to post.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== TESTIMONIALS ===================== -->
+<section id="testimonials" class="relative py-28 md:py-36 px-6 md:px-10 section-divider overflow-hidden">
+  <span class="tc-label">06 — TESTIMONIALS</span>
+
+  <div class="max-w-7xl mx-auto">
+    <h2 class="font-display text-[14vw] md:text-[5.5vw] leading-[0.85] text-white mb-16" data-reveal>
+      CLIENT <span class="grad-text">WORDS</span>
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div class="testimonial-card card-lift rounded-2xl border border-line glass p-8 flex flex-col justify-between" data-reveal>
+        <div>
+          <div class="flex gap-1 mb-5 text-cyan">★★★★★</div>
+          <p class="text-off/90 text-[15px] leading-relaxed mb-8">"Our retention on Reels nearly doubled after switching editors. The pacing and hook structure completely changed how people watched our content."</p>
+        </div>
+        <div class="flex items-center gap-3 font-mono text-xs">
+          <div class="w-10 h-10 rounded-full bg-gradient-to-br from-violet to-cyan"></div>
+          <div>
+            <p class="text-white">J. MERCER</p>
+            <p class="text-mute">Fitness Creator, 480K followers</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="testimonial-card card-lift rounded-2xl border border-line glass p-8 flex flex-col justify-between" data-reveal>
+        <div>
+          <div class="flex gap-1 mb-5 text-cyan">★★★★★</div>
+          <p class="text-off/90 text-[15px] leading-relaxed mb-8">"Fast, professional, and genuinely understands short-form. Sent over raw podcast footage and got back five scroll-stopping clips within two days."</p>
+        </div>
+        <div class="flex items-center gap-3 font-mono text-xs">
+          <div class="w-10 h-10 rounded-full bg-gradient-to-br from-cyan to-violet"></div>
+          <div>
+            <p class="text-white">A. OKAFOR</p>
+            <p class="text-mute">Podcast Host</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="testimonial-card card-lift rounded-2xl border border-line glass p-8 flex flex-col justify-between" data-reveal>
+        <div>
+          <div class="flex gap-1 mb-5 text-cyan">★★★★★</div>
+          <p class="text-off/90 text-[15px] leading-relaxed mb-8">"The motion graphics work alone elevated our brand. Every clip now looks like it belongs to a studio, not a solo founder posting from their phone."</p>
+        </div>
+        <div class="flex items-center gap-3 font-mono text-xs">
+          <div class="w-10 h-10 rounded-full bg-gradient-to-br from-violet to-cyan"></div>
+          <div>
+            <p class="text-white">R. CHEN</p>
+            <p class="text-mute">Founder, SaaS startup</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== ABOUT ===================== -->
+<section id="about" class="relative py-28 md:py-36 px-6 md:px-10 section-divider">
+  <span class="tc-label">07 — ABOUT</span>
+
+  <div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+    <div class="lg:col-span-5 relative" data-reveal>
+      <div class="aspect-[4/5] rounded-2xl md:rounded-3xl border border-line overflow-hidden relative bg-panel">
+        <img src="https://placehold.co/800x1000/0B0D14/8A8FA3?text=YOUR+PHOTO+HERE" alt="Portrait placeholder" class="w-full h-full object-cover opacity-80" />
+        <div class="absolute inset-0 hero-gradient mix-blend-overlay"></div>
+      </div>
+      <div class="absolute -bottom-6 -right-4 md:-right-8 glass-strong rounded-2xl px-6 py-5 font-mono">
+        <p class="text-3xl font-display text-white">3<span class="text-cyan">+</span></p>
+        <p class="text-[10px] text-mute tracking-widest mt-1">YEARS EDITING</p>
+      </div>
+    </div>
+
+    <div class="lg:col-span-7" data-reveal>
+      <h2 class="font-display text-[14vw] md:text-[5vw] leading-[0.85] text-white mb-8">
+        ATTENTION IS <span class="grad-text">ENGINEERED.</span>
+      </h2>
+      <p class="text-mute text-base md:text-lg leading-relaxed mb-5">
+        I'm a young editor who treats the timeline like an instrument, not a chore.
+        My focus is attention engineering — the craft of designing every cut, caption
+        and beat to keep someone watching one second longer than they planned to.
+      </p>
+      <p class="text-mute text-base md:text-lg leading-relaxed mb-10">
+        I've spent the last few years inside short-form: studying what makes a hook
+        land, why a pattern interrupt works, and how pacing shapes a story on a 9:16
+        screen. The result is editing built on data and instinct in equal parts —
+        for creators and brands who want their content to actually get watched.
+      </p>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-6 font-mono">
+        <div>
+          <p class="text-white text-2xl font-display">200<span class="text-cyan">+</span></p>
+          <p class="text-mute text-[10px] tracking-widest mt-1">PROJECTS EDITED</p>
+        </div>
+        <div>
+          <p class="text-white text-2xl font-display">15<span class="text-cyan">+</span></p>
+          <p class="text-mute text-[10px] tracking-widest mt-1">BRAND PARTNERS</p>
+        </div>
+        <div>
+          <p class="text-white text-2xl font-display">48<span class="text-cyan">HR</span></p>
+          <p class="text-mute text-[10px] tracking-widest mt-1">AVG TURNAROUND</p>
+        </div>
+        <div>
+          <p class="text-white text-2xl font-display">4.9<span class="text-cyan">★</span></p>
+          <p class="text-mute text-[10px] tracking-widest mt-1">CLIENT RATING</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== CONTACT ===================== -->
+<section id="contact" class="relative py-28 md:py-36 px-6 md:px-10 section-divider overflow-hidden">
+  <span class="tc-label">08 — CONTACT</span>
+  <div class="absolute inset-0 hero-gradient opacity-40 pointer-events-none"></div>
+
+  <div class="max-w-7xl mx-auto relative z-10">
+    <div class="text-center max-w-2xl mx-auto mb-16" data-reveal>
+      <h2 class="font-display text-[15vw] md:text-[5.5vw] leading-[0.85] text-white mb-6">
+        LET'S MAKE YOUR <span class="grad-text">NEXT POST HIT.</span>
+      </h2>
+      <p class="text-mute text-base md:text-lg">
+        Tell me about your content and goals — I'll reply within 24 hours with next steps.
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <!-- Form -->
+      <form id="contact-form" class="lg:col-span-7 glass rounded-2xl md:rounded-3xl p-7 md:p-10 space-y-6" data-reveal>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label class="block font-mono text-[10px] tracking-[0.2em] text-mute mb-2">NAME</label>
+            <input required type="text" placeholder="Your name" class="focus-ring w-full border-b border-line py-3 text-white placeholder:text-mute/60 transition-colors focus:border-cyan" />
+          </div>
+          <div>
+            <label class="block font-mono text-[10px] tracking-[0.2em] text-mute mb-2">EMAIL</label>
+            <input required type="email" placeholder="you@email.com" class="focus-ring w-full border-b border-line py-3 text-white placeholder:text-mute/60 transition-colors focus:border-cyan" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-mono text-[10px] tracking-[0.2em] text-mute mb-2">PLATFORM FOCUS</label>
+          <select class="focus-ring w-full border-b border-line py-3 text-white bg-transparent transition-colors focus:border-cyan">
+            <option class="bg-panel">TikTok</option>
+            <option class="bg-panel">Instagram Reels</option>
+            <option class="bg-panel">YouTube Shorts</option>
+            <option class="bg-panel">Multi-platform</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-mono text-[10px] tracking-[0.2em] text-mute mb-2">PROJECT DETAILS</label>
+          <textarea required rows="4" placeholder="Tell me about your content, goals and timeline…" class="focus-ring w-full border-b border-line py-3 text-white placeholder:text-mute/60 transition-colors focus:border-cyan resize-none"></textarea>
+        </div>
+
+        <button type="submit" class="magnetic btn-primary w-full md:w-auto inline-flex items-center justify-center gap-2 text-sm font-mono tracking-widest uppercase px-8 py-4 rounded-full">
+          Send Message
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M7 17L17 7M17 7H8M17 7v9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <p id="form-success" class="hidden font-mono text-xs text-cyan pt-2">MESSAGE QUEUED — I'll reply within 24 hours.</p>
+      </form>
+
+      <!-- Direct channels -->
+      <div class="lg:col-span-5 flex flex-col gap-5">
+        <a href="https://wa.me/15550101234" target="_blank" rel="noopener" class="magnetic card-lift glass rounded-2xl p-6 flex items-center justify-between border border-line group" data-reveal>
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-[#25D366]/15 border border-[#25D366]/30 flex items-center justify-center">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#25D366"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.69.45 3.33 1.3 4.78L2 22l5.46-1.41a9.86 9.86 0 004.58 1.16h.01c5.46 0 9.9-4.45 9.9-9.91A9.86 9.86 0 0012.04 2zm5.8 13.97c-.24.69-1.4 1.32-1.93 1.4-.49.08-1.11.11-1.79-.11-.41-.13-.94-.3-1.62-.6-2.85-1.23-4.71-4.1-4.85-4.29-.14-.19-1.16-1.54-1.16-2.94 0-1.4.73-2.08 1-2.37.26-.28.57-.35.76-.35h.55c.18 0 .42-.07.65.5.24.58.81 2 .89 2.14.07.14.12.31.02.5-.1.19-.15.31-.3.48-.14.16-.3.36-.43.49-.14.14-.29.29-.13.57.16.28.71 1.18 1.53 1.91 1.05.94 1.94 1.23 2.22 1.37.28.14.44.12.6-.07.16-.19.69-.81.88-1.09.18-.28.37-.23.62-.14.26.09 1.64.78 1.92.92.28.14.47.21.54.33.07.12.07.69-.17 1.38z"/></svg>
+            </div>
+            <div>
+              <p class="text-white font-medium text-sm">WhatsApp</p>
+              <p class="text-mute text-xs font-mono">Fastest response</p>
+            </div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" class="text-mute group-hover:text-cyan group-hover:translate-x-1 transition-all"><path d="M7 17L17 7M17 7H8M17 7v9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+
+        <a href="https://instagram.com/framework.edits" target="_blank" rel="noopener" class="magnetic card-lift glass rounded-2xl p-6 flex items-center justify-between border border-line group" data-reveal>
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-violet/15 border border-violet/30 flex items-center justify-center">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="5" stroke="#7C5CFF" stroke-width="1.7"/><circle cx="12" cy="12" r="4" stroke="#7C5CFF" stroke-width="1.7"/><circle cx="17.3" cy="6.7" r="1.1" fill="#7C5CFF"/></svg>
+            </div>
+            <div>
+              <p class="text-white font-medium text-sm">Instagram</p>
+              <p class="text-mute text-xs font-mono">@framework.edits</p>
+            </div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" class="text-mute group-hover:text-cyan group-hover:translate-x-1 transition-all"><path d="M7 17L17 7M17 7H8M17 7v9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+
+        <a href="mailto:edit@frameworkstudio.co" class="magnetic card-lift glass rounded-2xl p-6 flex items-center justify-between border border-line group" data-reveal>
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-cyan/15 border border-cyan/30 flex items-center justify-center">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="#2EE6FF" stroke-width="1.7"/><path d="M3 7l9 6 9-6" stroke="#2EE6FF" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div>
+              <p class="text-white font-medium text-sm">Email</p>
+              <p class="text-mute text-xs font-mono">edit@frameworkstudio.co</p>
+            </div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" class="text-mute group-hover:text-cyan group-hover:translate-x-1 transition-all"><path d="M7 17L17 7M17 7H8M17 7v9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+
+        <div class="glass rounded-2xl p-6 border border-line flex-1 flex flex-col justify-center" data-reveal>
+          <p class="font-mono text-[10px] tracking-[0.2em] text-mute mb-2">CURRENT STATUS</p>
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-cyan animate-pulse"></span>
+            <span class="text-white text-sm">Booking projects for July 2026</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FOOTER ===================== -->
+<footer class="relative px-6 md:px-10 py-12 border-t border-line">
+  <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+    <a href="#home" class="font-display text-2xl tracking-wider text-white">FRAMEWORK<span class="text-cyan">.</span></a>
+
+    <p class="font-mono text-[11px] tracking-widest text-mute text-center">
+      © 2026 FRAMEWORK STUDIO — ALL RIGHTS RESERVED
+    </p>
+
+    <div class="flex items-center gap-5">
+      <a href="https://instagram.com/framework.edits" target="_blank" rel="noopener" class="magnetic text-mute hover:text-cyan transition-colors" aria-label="Instagram">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.6"/><circle cx="17.3" cy="6.7" r="1" fill="currentColor"/></svg>
+      </a>
+      <a href="https://wa.me/15550101234" target="_blank" rel="noopener" class="magnetic text-mute hover:text-cyan transition-colors" aria-label="WhatsApp">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.69.45 3.33 1.3 4.78L2 22l5.46-1.41a9.86 9.86 0 004.58 1.16h.01c5.46 0 9.9-4.45 9.9-9.91A9.86 9.86 0 0012.04 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      </a>
+      <a href="mailto:edit@frameworkstudio.co" class="magnetic text-mute hover:text-cyan transition-colors" aria-label="Email">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M3 7l9 6 9-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+    </div>
+  </div>
+</footer>
+
+<!-- back to top -->
+<button id="back-to-top" class="magnetic fixed bottom-6 right-6 w-12 h-12 rounded-full glass-strong flex items-center justify-center text-white z-[1500] opacity-0 pointer-events-none transition-opacity duration-300" aria-label="Back to top">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</button>
+
+<script>
+/* =========================================================================
+   PORTFOLIO DATA — REPLACE THIS ARRAY TO SWAP IN REAL PROJECTS
+   - thumb: poster image shown on the card
+   - video: source the modal player loads on click (mp4 path or URL)
+   ========================================================================= */
+const PROJECTS = [
+  { title: "Push Day Protocol",      category: "Fitness",         color: "7C5CFF,2EE6FF" },
+  { title: "Scale Without Burnout",  category: "Business",        color: "2EE6FF,7C5CFF" },
+  { title: "Mic'd Up Ep. 42",        category: "Podcast",         color: "7C5CFF,2EE6FF" },
+  { title: "Clutch or Choke",        category: "Gaming",          color: "2EE6FF,7C5CFF" },
+  { title: "Compound Interest 101",  category: "Finance",         color: "7C5CFF,2EE6FF" },
+  { title: "Learn in 60 Seconds",    category: "Education",       color: "2EE6FF,7C5CFF" },
+  { title: "Morning Reset",          category: "Lifestyle",       color: "7C5CFF,2EE6FF" },
+  { title: "No Days Off",            category: "Motivation",      color: "2EE6FF,7C5CFF" },
+  { title: "Unboxing the Future",    category: "Tech",            color: "7C5CFF,2EE6FF" },
+  { title: "Quiet Luxury",           category: "Luxury",          color: "2EE6FF,7C5CFF" },
+  { title: "48 Hours in Kyoto",      category: "Travel",          color: "7C5CFF,2EE6FF" },
+  { title: "Building in Public",     category: "Personal Brand",  color: "2EE6FF,7C5CFF" },
+];
+
+function buildPortfolioGrid(){
+  const grid = document.getElementById('portfolio-grid');
+  grid.innerHTML = PROJECTS.map((p, i) => {
+    const [c1, c2] = p.color.split(',');
+    const num = String(i + 1).padStart(2, '0');
+    return `
+    <div class="port-item card-lift rounded-2xl border border-line overflow-hidden relative aspect-[4/5]"
+         data-category="${p.category}" data-title="${p.title}" data-video=""
+         data-thumb="https://placehold.co/800x1000/0B0D14/8A8FA3?text=${encodeURIComponent(p.title)}">
+      <img class="port-thumb absolute inset-0 w-full h-full object-cover"
+           src="https://placehold.co/800x1000/0B0D14/8A8FA3?text=${encodeURIComponent(p.title)}"
+           alt="${p.title} — ${p.category} project thumbnail placeholder" loading="lazy" />
+      <div class="absolute inset-0" style="background:linear-gradient(160deg, rgba(${hexToRgb(c1)},0.18), rgba(${hexToRgb(c2)},0.05));"></div>
+
+      <span class="absolute top-4 left-4 clip-tag glass px-3 py-1.5 rounded-full text-white/90">${p.category.toUpperCase()}</span>
+      <span class="absolute top-4 right-4 font-mono text-[10px] text-white/40">${num}</span>
+
+      <div class="play-ring absolute inset-0 flex items-center justify-center">
+        <div class="w-16 h-16 rounded-full glass-strong flex items-center justify-center">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" class="ml-0.5"><path d="M8 5v14l11-7L8 5z" fill="white"/></svg>
+        </div>
+      </div>
+
+      <div class="port-overlay absolute inset-0"></div>
+      <div class="port-meta absolute bottom-0 left-0 right-0 p-5">
+        <h3 class="font-display text-2xl text-white tracking-wide leading-none">${p.title}</h3>
+        <p class="font-mono text-[10px] tracking-[0.2em] text-cyan mt-2">VIEW PROJECT →</p>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function hexToRgb(hex){
+  const map = { '7C5CFF':'124,92,255', '2EE6FF':'46,230,255' };
+  return map[hex] || '124,92,255';
+}
+
+buildPortfolioGrid();
+
+/* =========================================================================
+   PORTFOLIO FILTERS
+   ========================================================================= */
+document.getElementById('portfolio-filters').addEventListener('click', (e) => {
+  const btn = e.target.closest('.filter-btn');
+  if(!btn) return;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const filter = btn.dataset.filter;
+  const items = document.querySelectorAll('#portfolio-grid .port-item');
+  items.forEach(item => {
+    const show = filter === 'all' || item.dataset.category === filter;
+    gsap.to(item, {
+      opacity: show ? 1 : 0,
+      scale: show ? 1 : 0.92,
+      duration: 0.35,
+      ease: 'power2.out',
+      onStart(){ if(show) item.style.display = 'block'; },
+      onComplete(){ if(!show) item.style.display = 'none'; }
+    });
+  });
+});
+
+/* =========================================================================
+   VIDEO MODAL
+   ========================================================================= */
+const modal = document.getElementById('video-modal');
+const modalVideo = document.getElementById('modal-video');
+const modalTitle = document.getElementById('modal-title');
+const modalCat = document.getElementById('modal-cat');
+
+document.getElementById('portfolio-grid').addEventListener('click', (e) => {
+  const item = e.target.closest('.port-item');
+  if(!item) return;
+  openModal(item.dataset.title, item.dataset.category, item.dataset.video);
+});
+
+function openModal(title, category, videoSrc){
+  modalTitle.textContent = title.toUpperCase().replace(/ /g, '_');
+  modalCat.textContent = category.toUpperCase();
+  // REPLACE: when you have real files, modalVideo.src = videoSrc; here.
+  modalVideo.removeAttribute('src');
+  modalVideo.poster = `https://placehold.co/720x1280/0B0D14/8A8FA3?text=${encodeURIComponent(title)}`;
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  gsap.fromTo(modal, { opacity: 0 }, { opacity: 1, duration: 0.3 });
+  gsap.fromTo(modal.querySelector('#modal-panel'), { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, delay: 0.05, ease: 'power3.out' });
+}
+function closeModal(){
+  gsap.to(modal, {
+    opacity: 0, duration: 0.25, onComplete(){
+      modal.classList.remove('open');
+      document.body.style.overflow = '';
+      modalVideo.pause();
+    }
+  });
+}
+document.getElementById('modal-close').addEventListener('click', closeModal);
+modal.addEventListener('click', (e) => { if(e.target === modal) closeModal(); });
+document.addEventListener('keydown', (e) => { if(e.key === 'Escape' && modal.classList.contains('open')) closeModal(); });
+
+/* showreel main play button toggle */
+const mainReel = document.getElementById('main-reel');
+const reelBtn = document.getElementById('reel-play-btn');
+reelBtn.addEventListener('click', () => {
+  if(mainReel.paused){ mainReel.play(); reelBtn.style.opacity = 0.3; }
+  else { mainReel.pause(); reelBtn.style.opacity = 1; }
+});
+
+/* =========================================================================
+   TIMELINE RULER TICKS (hero)
+   ========================================================================= */
+(function buildRuler(){
+  const ruler = document.getElementById('hero-ruler');
+  const count = 60;
+  ruler.innerHTML = Array.from({length: count}).map(() => `<div class="tick"></div>`).join('');
+})();
+
+/* waveform bars */
+(function buildWaveform(){
+  const wf = document.getElementById('hero-waveform');
+  if(!wf) return;
+  const bars = 28;
+  wf.innerHTML = Array.from({length: bars}).map(() => {
+    const h = 6 + Math.random() * 34;
+    return `<span style="height:${h}px"></span>`;
+  }).join('');
+})();
+
+/* =========================================================================
+   LOADER
+   ========================================================================= */
+window.addEventListener('load', () => {
+  const bar = document.getElementById('loader-bar');
+  const pct = document.getElementById('loader-pct');
+  const loader = document.getElementById('loader');
+  const counter = { val: 0 };
+
+  gsap.to(counter, {
+    val: 100,
+    duration: 1.6,
+    ease: 'power2.inOut',
+    onUpdate(){
+      const v = Math.round(counter.val);
+      bar.style.width = v + '%';
+      pct.textContent = v;
+    },
+    onComplete(){
+      gsap.to(loader, {
+        yPercent: -100,
+        duration: 0.9,
+        delay: 0.15,
+        ease: 'power4.inOut',
+        onComplete(){
+          loader.style.display = 'none';
+          runHeroIntro();
+        }
+      });
+    }
+  });
+});
+
+/* =========================================================================
+   CUSTOM CURSOR
+   ========================================================================= */
+const cursorDot = document.getElementById('cursor-dot');
+const cursorRing = document.getElementById('cursor-ring');
+let mouseX = innerWidth/2, mouseY = innerHeight/2, ringX = mouseX, ringY = mouseY;
+
+window.addEventListener('mousemove', (e) => {
+  mouseX = e.clientX; mouseY = e.clientY;
+  cursorDot.style.left = mouseX + 'px';
+  cursorDot.style.top = mouseY + 'px';
+});
+
+(function animateRing(){
+  ringX += (mouseX - ringX) * 0.18;
+  ringY += (mouseY - ringY) * 0.18;
+  cursorRing.style.left = ringX + 'px';
+  cursorRing.style.top = ringY + 'px';
+  requestAnimationFrame(animateRing);
+})();
+
+document.querySelectorAll('a, button, .magnetic, .port-item, input, textarea, select').forEach(el => {
+  el.addEventListener('mouseenter', () => cursorRing.classList.add('ring-hover'));
+  el.addEventListener('mouseleave', () => cursorRing.classList.remove('ring-hover'));
+});
+
+/* =========================================================================
+   MAGNETIC BUTTONS
+   ========================================================================= */
+document.querySelectorAll('.magnetic').forEach(btn => {
+  btn.addEventListener('mousemove', (e) => {
+    const r = btn.getBoundingClientRect();
+    const x = e.clientX - r.left - r.width/2;
+    const y = e.clientY - r.top - r.height/2;
+    gsap.to(btn, { x: x * 0.35, y: y * 0.35, duration: 0.5, ease: 'power3.out' });
+  });
+  btn.addEventListener('mouseleave', () => {
+    gsap.to(btn, { x: 0, y: 0, duration: 0.6, ease: 'elastic.out(1, 0.4)' });
+  });
+});
+
+/* =========================================================================
+   NAVBAR — scroll state + mobile menu
+   ========================================================================= */
+const navbar = document.getElementById('navbar');
+window.addEventListener('scroll', () => {
+  if(window.scrollY > 60){ navbar.classList.add('glass-strong'); }
+  else { navbar.classList.remove('glass-strong'); }
+
+  const backTop = document.getElementById('back-to-top');
+  if(window.scrollY > 800){ backTop.style.opacity = 1; backTop.style.pointerEvents = 'auto'; }
+  else { backTop.style.opacity = 0; backTop.style.pointerEvents = 'none'; }
+});
+document.getElementById('back-to-top').addEventListener('click', () => {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+const menuBtn = document.getElementById('menu-btn');
+const menuClose = document.getElementById('menu-close');
+const mobileMenu = document.getElementById('mobile-menu');
+menuBtn.addEventListener('click', () => {
+  mobileMenu.classList.remove('translate-x-full');
+  gsap.fromTo('.mobile-link', { x: 40, opacity: 0 }, { x: 0, opacity: 1, stagger: 0.07, duration: 0.5, ease: 'power3.out', delay: 0.15 });
+});
+menuClose.addEventListener('click', () => mobileMenu.classList.add('translate-x-full'));
+document.querySelectorAll('.mobile-link').forEach(l => l.addEventListener('click', () => mobileMenu.classList.add('translate-x-full')));
+
+/* =========================================================================
+   GSAP / SCROLLTRIGGER SETUP
+   ========================================================================= */
+gsap.registerPlugin(ScrollTrigger);
+
+/* scroll progress bar = the master "playhead" */
+gsap.to('#scroll-progress-bar', {
+  width: '100%',
+  ease: 'none',
+  scrollTrigger: { trigger: document.body, start: 'top top', end: 'bottom bottom', scrub: 0.3 }
+});
+
+/* hero intro sequence — runs after loader exits */
+function runHeroIntro(){
+  const tl = gsap.timeline({ defaults: { ease: 'power4.out' } });
+
+  tl.to('.reveal-line > span', {
+      yPercent: 0, duration: 1.1, stagger: 0.12,
+    }, 0)
+    .from('[data-hero-fade]', { y: 16, opacity: 0, duration: 0.8, stagger: 0.12 }, 0.6)
+    .from('#hero-ruler', { opacity: 0, duration: 1 }, 0.9);
+}
+// set initial state for reveal lines (before intro runs)
+gsap.set('.reveal-line > span', { yPercent: 110 });
+
+/* generic scroll reveals */
+gsap.utils.toArray('[data-reveal]').forEach((el) => {
+  gsap.fromTo(el,
+    { y: 40, opacity: 0 },
+    {
+      y: 0, opacity: 1, duration: 0.9, ease: 'power3.out',
+      scrollTrigger: { trigger: el, start: 'top 88%', toggleActions: 'play none none none' }
+    }
+  );
+});
+
+/* services / testimonial cards stagger by parent grid */
+['#services-grid'].forEach(sel => {
+  const grid = document.querySelector(sel);
+  if(!grid) return;
+  gsap.fromTo(grid.children,
+    { y: 50, opacity: 0 },
+    {
+      y: 0, opacity: 1, duration: 0.8, stagger: 0.08, ease: 'power3.out',
+      scrollTrigger: { trigger: grid, start: 'top 85%' }
+    }
+  );
+});
+
+/* portfolio grid stagger reveal */
+gsap.fromTo('#portfolio-grid .port-item',
+  { y: 60, opacity: 0 },
+  {
+    y: 0, opacity: 1, duration: 0.8, stagger: 0.06, ease: 'power3.out',
+    scrollTrigger: { trigger: '#portfolio-grid', start: 'top 80%' }
+  }
+);
+
+/* stat counters */
+document.querySelectorAll('[data-count-to]').forEach(el => {
+  const end = parseFloat(el.dataset.countTo);
+  const suffix = el.dataset.suffix || '';
+  const obj = { val: 0 };
+  ScrollTrigger.create({
+    trigger: el,
+    start: 'top 85%',
+    once: true,
+    onEnter(){
+      gsap.to(obj, {
+        val: end, duration: 1.8, ease: 'power2.out',
+        onUpdate(){ el.textContent = (suffix === '%' || suffix === '/7') ? Math.round(obj.val) + suffix : Math.round(obj.val) + suffix; }
+      });
+    }
+  });
+});
+
+/* process timeline fill line */
+ScrollTrigger.create({
+  trigger: '#process-timeline',
+  start: 'top 70%',
+  end: 'bottom 60%',
+  scrub: 0.6,
+  onUpdate(self){
+    document.getElementById('process-line-fill').style.width = (self.progress * 100) + '%';
+  }
+});
+gsap.utils.toArray('.process-dot').forEach((dot, i) => {
+  ScrollTrigger.create({
+    trigger: dot,
+    start: 'top 75%',
+    onEnter(){ gsap.to(dot, { backgroundColor: 'rgba(124,92,255,0.25)', borderColor: '#2EE6FF', duration: 0.4 }); }
+  });
+});
+
+/* parallax floating particles in hero */
+(function heroParticles(){
+  const canvas = document.getElementById('hero-canvas');
+  const n = 16;
+  for(let i=0;i<n;i++){
+    const p = document.createElement('div');
+    p.className = 'float-particle';
+    const size = 2 + Math.random()*4;
+    p.style.width = size+'px';
+    p.style.height = size+'px';
+    p.style.left = Math.random()*100+'%';
+    p.style.top = Math.random()*100+'%';
+    p.style.opacity = 0.2 + Math.random()*0.5;
+    canvas.appendChild(p);
+    gsap.to(p, {
+      y: `+=${(Math.random()-0.5)*120}`,
+      x: `+=${(Math.random()-0.5)*80}`,
+      duration: 6 + Math.random()*8,
+      repeat: -1,
+      yoyo: true,
+      ease: 'sine.inOut'
+    });
+  }
+  // gentle parallax on scroll
+  gsap.to(canvas, {
+    yPercent: 20,
+    ease: 'none',
+    scrollTrigger: { trigger: '#home', start: 'top top', end: 'bottom top', scrub: true }
+  });
+})();
+
+/* section divider rulers — subtle reveal */
+gsap.utils.toArray('.section-divider').forEach(sec => {
+  gsap.fromTo(sec, { opacity: 0.6 }, {
+    opacity: 1, duration: 1,
+    scrollTrigger: { trigger: sec, start: 'top 95%' }
+  });
+});
+
+/* =========================================================================
+   CONTACT FORM (no backend — demo submit state)
+   ========================================================================= */
+document.getElementById('contact-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  const success = document.getElementById('form-success');
+  btn.textContent = 'SENDING…';
+  setTimeout(() => {
+    success.classList.remove('hidden');
+    e.target.reset();
+    btn.innerHTML = `Send Message
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M7 17L17 7M17 7H8M17 7v9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  }, 900);
+});
+
+/* recalc ScrollTrigger after fonts/images settle */
+window.addEventListener('load', () => setTimeout(() => ScrollTrigger.refresh(), 300));
+</script>
+
+</body>
+</html>
